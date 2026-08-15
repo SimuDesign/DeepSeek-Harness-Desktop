@@ -24,6 +24,41 @@ const WINDOW_WIDTH = 1440
 const WINDOW_HEIGHT = 920
 const DESKTOP_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
+/**
+ * Make the conversation header drag the frameless window.
+ *
+ * The official web UI knows nothing about a desktop frame, so the shell
+ * injects `-webkit-app-region` rules keyed on the stable slot contract
+ * (`data-slot="conversation.session.header"`, rendered by dsh-client-web-react)
+ * plus the hero workspace row. Interactive controls inside the header are
+ * restored to `no-drag` so clicks keep working.
+ *
+ * The slot element itself renders `display: contents` (no box of its own),
+ * so the drag rule must target its descendants — otherwise the region has
+ * zero hit area and the header cannot be dragged at all.
+ */
+const DRAG_REGION_CSS = `
+  [data-slot="conversation.session.header"],
+  [data-slot="conversation.session.header"] * {
+    -webkit-app-region: drag;
+  }
+  [data-slot="conversation.session.header"] button,
+  [data-slot="conversation.session.header"] a,
+  [data-slot="conversation.session.header"] input,
+  [data-slot="conversation.session.header"] select,
+  [data-slot="conversation.session.header"] textarea,
+  [data-slot="conversation.session.header"] [role="button"],
+  [data-slot="conversation.session.header"] [tabindex] {
+    -webkit-app-region: no-drag;
+  }
+  [data-phase="hero"] [class*="heroWorkspaceRow"] {
+    -webkit-app-region: drag;
+  }
+  [data-phase="hero"] [class*="heroWorkspaceRow"] * {
+    -webkit-app-region: no-drag;
+  }
+`
+
 let mainWindow: BrowserWindow | undefined
 let tray: Tray | undefined
 let host: HostSupervisor | undefined
@@ -156,8 +191,55 @@ async function createMainWindow(): Promise<BrowserWindow> {
   const rendererUrl = new URL(origin)
   rendererUrl.searchParams.set('dsh-desktop-platform', process.platform)
   await window.loadURL(rendererUrl.href)
+  // Declarative rules apply to elements rendered later, so inserting once
+  // after load is enough; the header slot appears once the client boots.
+  await window.webContents.insertCSS(DRAG_REGION_CSS)
+  void verifyDragRegions(window)
   if (!lifecycle?.isQuitting) window.show()
   return window
+}
+
+/**
+ * Poll the renderer for the injected drag regions and log the outcome, so a
+ * future harness update that renames the header slot is caught at startup.
+ */
+async function verifyDragRegions(window: BrowserWindow): Promise<void> {
+  const probe = `(() => {
+    const header = document.querySelector('[data-slot="conversation.session.header"]')
+    if (header === null) return 'header slot not rendered yet'
+    const headerRegion = getComputedStyle(header).webkitAppRegion
+    const hidden = getComputedStyle(header).display === 'none' || getComputedStyle(header).visibility === 'hidden'
+    // The slot renders display:contents (boxless), so count descendants that
+    // actually carry a box and a drag region — boxes === 0 means draggable
+    // area is zero even when the computed style says drag.
+    const boxes = [...header.querySelectorAll('*')]
+      .filter((el) => {
+        const r = el.getBoundingClientRect()
+        return r.width > 0 && r.height > 0 && getComputedStyle(el).webkitAppRegion === 'drag'
+      })
+      .length
+    const controls = [...header.querySelectorAll('button, a, [role="button"], [tabindex]')]
+      .filter((el) => {
+        const r = el.getBoundingClientRect()
+        return r.width > 0 && r.height > 0
+      })
+      .map((el) => getComputedStyle(el).webkitAppRegion)
+    return 'header=' + headerRegion + ' hidden=' + String(hidden) + ' boxes=' + String(boxes) +
+      ' controls=' + [...new Set(controls)].join(',')
+  })()`
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    try {
+      const report = await window.webContents.executeJavaScript(probe)
+      if (typeof report === 'string' && !report.includes('not rendered yet')) {
+        console.log(`desktop drag regions: ${report}`)
+        return
+      }
+    } catch {
+      // Renderer not ready yet; keep polling.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+  }
+  console.warn('desktop drag regions: conversation header slot never appeared')
 }
 
 function createTray(): void {

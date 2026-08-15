@@ -3,6 +3,7 @@ lib/
 dist/
 runtime-host/
 .caches/
+.reasonix/
 .tools/
 .dsh-home-*/
 .electron-cache/
