@@ -4,7 +4,7 @@ dist/
 runtime-host/
 .caches/
 .tools/
-.dsh-home-dev/
+.dsh-home-*/
 .electron-cache/
 *.log
 .DS_Store
