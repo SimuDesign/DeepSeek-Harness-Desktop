@@ -15,6 +15,47 @@
     "dist:mac": "node scripts/release-mac.mjs"
   },
   "license": "MIT",
+  "build": {
+    "appId": "com.dsh.desktop",
+    "productName": "DeepSeek Harness",
+    "asar": true,
+    "electronDist": "node_modules/electron/dist",
+    "directories": {
+      "output": "dist",
+      "buildResources": "resources"
+    },
+    "files": [
+      "lib/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "desktop-resources"
+      },
+      {
+        "from": "runtime-host/node_modules",
+        "to": "host/node_modules"
+      }
+    ],
+    "afterPack": "scripts/verify-packaged-runtime.mjs",
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "hardenedRuntime": true,
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ]
+    },
+    "dmg": {
+      "title": "DeepSeek Harness"
+    }
+  },
   "pnpm": {
     "onlyBuiltDependencies": [
       "electron",
