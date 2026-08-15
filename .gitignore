@@ -1,11 +1,12 @@
 node_modules/
-lib/
+/lib/
 dist/
 runtime-host/
 .caches/
 .reasonix/
 .tools/
 .dsh-home-*/
+.dsh-vision/
 .electron-cache/
 *.log
 .DS_Store

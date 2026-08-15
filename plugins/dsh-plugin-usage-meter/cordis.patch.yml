@@ -1,0 +1,18 @@
+# dsh-plugin-usage-meter bundle patch
+# Registers the usage-meter service into the DSH composition.
+#
+# Optional per-deployment config (merge into your profile cordis.patch.yml):
+#
+#   - insert:
+#       - id: dsh-plugin-usage-meter
+#         name: 'dsh-plugin-usage-meter'
+#         config:
+#           currency: CNY          # CNY | USD (display symbol)
+#           inputPerM: 2           # per 1M uncached input tokens
+#           cacheHitPerM: 0.5      # per 1M cache-read input tokens
+#           outputPerM: 8          # per 1M output tokens
+#           keyRef: DEEPSEEK_API_KEY  # credential reference for the balance proxy
+#
+- insert:
+    - id: dsh-plugin-usage-meter
+      name: 'dsh-plugin-usage-meter'

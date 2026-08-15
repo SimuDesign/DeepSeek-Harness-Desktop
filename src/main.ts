@@ -57,6 +57,34 @@ const DRAG_REGION_CSS = `
   [data-phase="hero"] [class*="heroWorkspaceRow"] * {
     -webkit-app-region: no-drag;
   }
+  /* Sidebar: the slot element renders display:contents (boxless). Drag only
+     the column's own box — its padding, i.e. the traffic-light clearance and
+     the column edges. EVERY descendant gets an explicit no-drag: app-region
+     propagates down the DOM (a drag region swallows clicks on its subtree
+     unless interrupted by no-drag — "none" computed style is NOT enough), so
+     the blanket rule is what keeps rows, list scrolling and the settings
+     panel (which renders inside this slot) clickable. */
+  [data-slot="sidebar"] > * {
+    -webkit-app-region: drag;
+  }
+  /* Every descendant of the column gets an explicit no-drag (NOT "*" — that
+     would also match the column itself and kill the drag region). */
+  [data-slot="sidebar"] > * * {
+    -webkit-app-region: no-drag;
+  }
+`
+
+/**
+ * macOS-only clearance so the sidebar wordmark row does not collide with the
+ * traffic lights (roughly x 16..70 / y 18..34 with hiddenInset). The sidebar
+ * column is border-box, so padding-top compresses the flex:1 list region
+ * instead of overflowing the window.
+ */
+const MACOS_SIDEBAR_CLEARANCE_CSS = `
+  [data-slot="sidebar"] > * {
+    box-sizing: border-box !important;
+    padding-top: 48px !important;
+  }
 `
 
 let mainWindow: BrowserWindow | undefined
@@ -193,7 +221,9 @@ async function createMainWindow(): Promise<BrowserWindow> {
   await window.loadURL(rendererUrl.href)
   // Declarative rules apply to elements rendered later, so inserting once
   // after load is enough; the header slot appears once the client boots.
-  await window.webContents.insertCSS(DRAG_REGION_CSS)
+  await window.webContents.insertCSS(
+    DRAG_REGION_CSS + (process.platform === 'darwin' ? MACOS_SIDEBAR_CLEARANCE_CSS : '')
+  )
   void verifyDragRegions(window)
   if (!lifecycle?.isQuitting) window.show()
   return window
@@ -205,27 +235,30 @@ async function createMainWindow(): Promise<BrowserWindow> {
  */
 async function verifyDragRegions(window: BrowserWindow): Promise<void> {
   const probe = `(() => {
-    const header = document.querySelector('[data-slot="conversation.session.header"]')
-    if (header === null) return 'header slot not rendered yet'
-    const headerRegion = getComputedStyle(header).webkitAppRegion
-    const hidden = getComputedStyle(header).display === 'none' || getComputedStyle(header).visibility === 'hidden'
-    // The slot renders display:contents (boxless), so count descendants that
-    // actually carry a box and a drag region — boxes === 0 means draggable
-    // area is zero even when the computed style says drag.
-    const boxes = [...header.querySelectorAll('*')]
+    const regionOf = (el) => el === null ? 'missing' : getComputedStyle(el).webkitAppRegion
+    const boxedDrag = (root) => [...root.querySelectorAll('*')]
       .filter((el) => {
         const r = el.getBoundingClientRect()
+        // Slots render display:contents (boxless), so only count descendants
+        // that carry a real box — boxes === 0 means zero draggable area even
+        // when the computed style says drag.
         return r.width > 0 && r.height > 0 && getComputedStyle(el).webkitAppRegion === 'drag'
       })
       .length
-    const controls = [...header.querySelectorAll('button, a, [role="button"], [tabindex]')]
+    const controls = (root) => [...root.querySelectorAll('button, a, [role="button"], [tabindex]')]
       .filter((el) => {
         const r = el.getBoundingClientRect()
         return r.width > 0 && r.height > 0
       })
       .map((el) => getComputedStyle(el).webkitAppRegion)
-    return 'header=' + headerRegion + ' hidden=' + String(hidden) + ' boxes=' + String(boxes) +
-      ' controls=' + [...new Set(controls)].join(',')
+    const header = document.querySelector('[data-slot="conversation.session.header"]')
+    const sidebar = document.querySelector('[data-slot="sidebar"]')
+    if (header === null || sidebar === null) return 'slots not rendered yet'
+    const hidden = getComputedStyle(header).display === 'none' || getComputedStyle(header).visibility === 'hidden'
+    return 'header=' + regionOf(header) + ' hidden=' + String(hidden) + ' boxes=' + String(boxedDrag(header)) +
+      ' headerControls=' + [...new Set(controls(header))].join(',') +
+      ' sidebar=' + regionOf(sidebar) + ' boxes=' + String(boxedDrag(sidebar)) +
+      ' sidebarControls=' + [...new Set(controls(sidebar))].join(',')
   })()`
   for (let attempt = 0; attempt < 30; attempt += 1) {
     try {
