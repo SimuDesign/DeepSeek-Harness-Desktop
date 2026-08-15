@@ -1,0 +1,22 @@
+# NOTICE
+
+dsh-desktop is an independent macOS desktop shell for the official
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)
+(`@deepseek-ai/dsh`). The Harness itself, including its Web UI and plugin
+runtime, is authored by DeepSeek and licensed under the MIT License.
+
+## Architecture attribution
+
+The desktop shell architecture — Electron main process supervising a
+loopback `dsh web` child on an OS-assigned port, parsing the canonical
+`dsh web: http://127.0.0.1:<port>` readiness line, tray-owned host lifecycle,
+`ELECTRON_RUN_AS_NODE` reuse of the bundled Node runtime, and staging a
+self-contained host dependency closure for packaging — is adapted from:
+
+- [anywhere-labs/deepseek-harness-desktop](https://github.com/anywhere-labs/deepseek-harness-desktop)
+  (MIT License) — `apps/desktop`: host-supervisor, window-lifecycle, staging
+  and packaging patterns.
+- [dawangcoding/ClawUI](https://github.com/dawangcoding/ClawUI) — child-process
+  gateway state machine and diagnostics-logging patterns.
+
+Third-party packages retain their own licenses.

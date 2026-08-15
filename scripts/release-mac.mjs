@@ -6,14 +6,14 @@
  * complete notarization credentials), then builds the signed+notarized DMG
  * through electron-builder and verifies signature, Gatekeeper and stapling.
  *
- * Credentials (choose one group):
+ * Notarization credentials (electron-builder reads these from the env):
  *   - Keychain profile:  xcrun notarytool store-credentials "dsh-notary" \
  *       --apple-id "<Apple ID>" --team-id "<Team ID>"
  *     then run with APPLE_KEYCHAIN_PROFILE=dsh-notary
  *   - Apple ID group: APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID
  *   - App Store Connect API key group: APPLE_API_KEY, APPLE_API_KEY_ID, APPLE_API_ISSUER
  *
- * Signing identity: MACOS_SIGN_IDENTITY (defaults to first Developer ID
+ * Signing identity: MACOS_SIGN_IDENTITY (defaults to the first Developer ID
  * Application identity in the login keychain), or a PKCS#12 at
  * MAC_CERT_P12_BASE64 + CSC_KEY_PASSWORD (electron-builder imports it).
  *
@@ -23,12 +23,11 @@
  */
 
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { existsSync, readdirSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const { dirname } = await import('node:path')
 
 function fail(message) {
   console.error(`release preflight failed: ${message}`)
@@ -36,10 +35,24 @@ function fail(message) {
 }
 
 function run(command, args, options = {}) {
-  const result = spawnSync(command, args, { stdio: 'inherit', env: { ...process.env, ...options.env }, cwd: options.cwd ?? repoRoot })
+  const result = spawnSync(command, args, {
+    stdio: 'inherit',
+    env: { ...process.env, ...options.env },
+    cwd: options.cwd ?? repoRoot,
+  })
   if (result.status !== 0) {
     fail(`${command} ${args.join(' ')} exited ${String(result.status)}`)
   }
+}
+
+function resolveElectronBuilder() {
+  const candidates = [
+    join(repoRoot, 'node_modules', '.bin', 'electron-builder'),
+    join(repoRoot, '.tools', 'npm-global', 'bin', 'electron-builder'),
+  ]
+  const found = candidates.find((candidate) => existsSync(candidate))
+  if (found === undefined) fail('electron-builder is not installed; run pnpm install first')
+  return found
 }
 
 function identityCandidates() {
@@ -71,20 +84,24 @@ function preflight() {
   return candidates[0]?.name
 }
 
-async function main() {
+function findDmg() {
+  const distDir = join(repoRoot, 'dist')
+  const candidates = readdirSync(distDir).filter((name) => name.endsWith('.dmg'))
+  if (candidates.length === 0) fail('no DMG produced under dist/')
+  return join(distDir, candidates[0])
+}
+
+function main() {
   const identity = preflight()
 
-  // Stage the self-contained runtime and build the signed+notarized DMG.
   run(process.execPath, ['scripts/stage-runtime.mjs'])
-  const builderArgs = ['--mac', 'dmg']
+  const builder = resolveElectronBuilder()
+  const args = ['--mac', 'dmg']
   if (identity !== undefined) {
-    builderArgs.push('--config.mac.identity', identity)
+    args.push('--config.mac.identity', identity)
   }
-  // electron-builder performs signing + notarization from its own config.
-  const builder = resolvePnpm()
-  run(builder, ['run', 'dist', '--', ...builderArgs])
+  run(builder, args)
 
-  // Verify the produced DMG's app.
   const dmg = findDmg()
   const mountPoint = execFileSync('mktemp', ['-d'], { encoding: 'utf8' }).trim()
   try {
@@ -99,20 +116,4 @@ async function main() {
   }
 }
 
-function resolvePnpm() {
-  const workspaceLocal = join(repoRoot, '.tools', 'npm-global', 'bin', 'pnpm')
-  return existsSync(workspaceLocal) ? workspaceLocal : 'pnpm'
-}
-
-function findDmg() {
-  const { readdirSync } = await import('node:fs')
-  const distDir = join(repoRoot, 'dist')
-  const candidates = readdirSync(distDir).filter((name) => name.endsWith('.dmg'))
-  if (candidates.length === 0) fail('no DMG produced under dist/')
-  return join(distDir, candidates[0])
-}
-
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error))
-  process.exit(1)
-})
+main()

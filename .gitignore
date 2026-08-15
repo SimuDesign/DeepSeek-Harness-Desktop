@@ -8,3 +8,5 @@ runtime-host/
 .electron-cache/
 *.log
 .DS_Store
+
+.logs/

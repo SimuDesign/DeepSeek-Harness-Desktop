@@ -1,6 +1,6 @@
 /** Electron application shell for the loopback DeepSeek Harness Web Host. */
 
-import { existsSync } from 'node:fs'
+import { createWriteStream, existsSync, mkdirSync, type WriteStream } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -31,6 +31,20 @@ let lifecycle: DesktopLifecycle | undefined
 let hostOrigin: string | undefined
 let bootQuitPromise: Promise<void> | undefined
 let quitReleased = false
+let hostLogStream: WriteStream | undefined
+
+/** Mirror Host output to stderr and a persistent diagnostics file. */
+function createHostLogger(): (chunk: string) => void {
+  const logDir = app.isPackaged
+    ? join(app.getPath('logs'), 'dsh-desktop')
+    : join(DESKTOP_DIR, '.logs')
+  mkdirSync(logDir, { recursive: true })
+  hostLogStream = createWriteStream(join(logDir, 'host.log'), { flags: 'a' })
+  return (chunk) => {
+    process.stderr.write(chunk)
+    hostLogStream?.write(chunk)
+  }
+}
 
 /** Resolve artifacts from the checkout in development and resourcesPath when packaged. */
 function hostPaths(): HostPaths {
@@ -160,6 +174,8 @@ function createTray(): void {
 
 function releaseAppQuit(): void {
   quitReleased = true
+  hostLogStream?.end()
+  hostLogStream = undefined
   tray?.destroy()
   tray = undefined
   app.quit()
@@ -188,7 +204,7 @@ async function boot(): Promise<void> {
         DSH_DESKTOP: '1',
       },
     }),
-    log: chunk => process.stderr.write(chunk),
+    log: createHostLogger(),
     onUnexpectedExit: ({ code, signal }) => {
       console.error(`desktop Host exited unexpectedly (code ${String(code)}, signal ${String(signal)})`)
       void dialog.showMessageBox({
