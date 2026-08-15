@@ -1,0 +1,10 @@
+node_modules/
+lib/
+dist/
+runtime-host/
+.caches/
+.tools/
+.dsh-home-dev/
+.electron-cache/
+*.log
+.DS_Store

@@ -1,0 +1,36 @@
+{
+  "name": "dsh-desktop",
+  "description": "macOS desktop client embedding the DeepSeek Harness (dsh web) with a tray-owned host lifecycle",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/main.js",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "build": "tsc -p tsconfig.json",
+    "dev": "pnpm run build && electron .",
+    "package": "pnpm run build && node scripts/stage-runtime.mjs && electron-builder --dir",
+    "dist": "pnpm run build && node scripts/stage-runtime.mjs && electron-builder",
+    "dist:mac": "node scripts/release-mac.mjs"
+  },
+  "license": "MIT",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "node-pty",
+      "koffi",
+      "@deepseek-ai/dsh-subprocess-local",
+      "@google/genai",
+      "protobufjs"
+    ]
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh": "0.1.0-rc.6",
+    "@types/node": "^22.20.0",
+    "electron": "43.4.0",
+    "electron-builder": "26.15.3",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
+  }
+}
