@@ -137,6 +137,14 @@ function trayImage(): Electron.NativeImage {
   return image
 }
 
+/** Resolve the sandboxed preload in development and resourcesPath when packaged. */
+function preloadPath(): string | undefined {
+  const candidates = app.isPackaged
+    ? [join(process.resourcesPath, 'desktop-resources/preload.cjs')]
+    : [join(DESKTOP_DIR, 'resources/preload.cjs')]
+  return candidates.find(candidate => existsSync(candidate))
+}
+
 function isExternalUrl(raw: string): boolean {
   try {
     const url = new URL(raw)
@@ -157,8 +165,19 @@ function hasOrigin(raw: string, expected: string): boolean {
 /** Install navigation and permission policy before the first renderer loads. */
 function hardenSession(): void {
   const desktopSession = session.defaultSession
-  desktopSession.setPermissionCheckHandler(() => false)
-  desktopSession.setPermissionRequestHandler((_webContents, _permission, callback) => { callback(false) })
+  // Clipboard WRITE stays enabled: the harness web UI copies through
+  // navigator.clipboard.writeText(), which rejects when the
+  // clipboard-sanitized-write permission check is denied. Clipboard READ is
+  // deliberately NOT allowlisted — the shipped UI never calls
+  // navigator.clipboard.readText (paste rides the DOM `paste` event, which
+  // needs no permission), so granting it would only let any renderer script
+  // silently read the user's clipboard. Every other permission — media,
+  // geolocation, sensors, … — remains denied.
+  const allowedPermissions = new Set(['clipboard-sanitized-write'])
+  desktopSession.setPermissionCheckHandler((_wc, permission) => allowedPermissions.has(permission))
+  desktopSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(allowedPermissions.has(permission))
+  })
 }
 
 async function createMainWindow(): Promise<BrowserWindow> {
@@ -200,6 +219,7 @@ async function createMainWindow(): Promise<BrowserWindow> {
       nodeIntegration: false,
       sandbox: true,
       webSecurity: true,
+      preload: preloadPath(),
     },
   })
   mainWindow = window

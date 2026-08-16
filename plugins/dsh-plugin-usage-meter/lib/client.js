@@ -50,12 +50,24 @@ window.__ModuleLoader__.load({
       return symbol + num.toFixed(2);
     }
 
-    /** Estimated cost: per-1M prices scaled by the projection buckets. */
-    function estimateCost(usage, prices) {
+    /** True while `now` (UTC) falls inside any [start, end) peak-hour window. */
+    function isPeak(now, peakHours) {
+      if (!peakHours || !peakHours.length) return false;
+      var h = now.getUTCHours();
+      for (var i = 0; i < peakHours.length; i += 1) {
+        var r = peakHours[i];
+        if (h >= r[0] && h < r[1]) return true;
+      }
+      return false;
+    }
+
+    /** Estimated cost in USD: per-1M prices scaled by the projection buckets, then by the peak multiplier. */
+    function estimateCost(usage, prices, multiplier) {
       if (!usage || !prices) return null;
-      return ((usage.uncachedInputTokens || 0) * (prices.inputPerM || 0)
+      var base = ((usage.uncachedInputTokens || 0) * (prices.inputPerM || 0)
         + (usage.cacheReadTokens || 0) * (prices.cacheHitPerM || 0)
         + (usage.outputTokens || 0) * (prices.outputPerM || 0)) / 1e6;
+      return base * (multiplier || 1);
     }
 
     function UsageChip(props) {
@@ -66,6 +78,15 @@ window.__ModuleLoader__.load({
       var prices = state[0].prices;
       var balance = state[0].balance;
       var note = state[0].note;
+
+      // Re-render every minute so the peak/off-peak figure flips at the
+      // UTC window boundary without a manual click.
+      var tickState = React.useState(0);
+      var setTick = tickState[1];
+      React.useEffect(function () {
+        var t = window.setInterval(function () { setTick(function (v) { return v + 1; }); }, 60000);
+        return function () { window.clearInterval(t); };
+      }, []);
 
       var load = React.useCallback(function () {
         var cancelled = false;
@@ -86,23 +107,32 @@ window.__ModuleLoader__.load({
 
       React.useEffect(function () { return load(); }, [load]);
 
+      var peakHours = prices && prices.peakHours;
+      var inPeak = isPeak(new Date(), peakHours);
+      var multiplier = inPeak ? ((prices && prices.peakMultiplier) || 2) : 1;
+
       var parts = [];
       var total = usage
         ? (usage.uncachedInputTokens || 0) + (usage.cacheReadTokens || 0) + (usage.outputTokens || 0)
         : 0;
+      var balanceCcy = 'CNY';
+      var first = balance && balance.balance_infos && balance.balance_infos[0];
+      if (first && first.currency) balanceCcy = first.currency;
       if (total > 0) {
-        var cost = estimateCost(usage, prices);
+        var cost = estimateCost(usage, prices, multiplier);
         parts.push(React.createElement('span', { key: 't' },
           React.createElement('span', { style: S.strong }, formatTokens(total)),
           React.createElement('span', { style: S.sep }, 'tok')));
         if (cost !== null && cost >= 0.001) {
+          // Prices are USD; convert to the balance currency when it is CNY.
+          var displayCost = cost;
+          if (balanceCcy === 'CNY' && prices && prices.usdToCny) displayCost = cost * prices.usdToCny;
           parts.push(React.createElement('span', { key: 'c' },
             React.createElement('span', { style: S.sep }, '·≈'),
-            React.createElement('span', { style: S.strong }, formatMoney(cost, (prices && prices.currency) || 'CNY'))));
+            React.createElement('span', { style: S.strong }, formatMoney(displayCost, balanceCcy))));
         }
       }
       var balanceText;
-      var first = balance && balance.balance_infos && balance.balance_infos[0];
       if (note) balanceText = note;
       else if (first) balanceText = formatMoney(first.total_balance, first.currency);
       else balanceText = '…';
@@ -110,7 +140,7 @@ window.__ModuleLoader__.load({
         React.createElement('span', { style: S.sep }, '·'),
         React.createElement('span', { style: S.strong }, balanceText)));
 
-      var title = '本会话 token 消耗（整段日志口径，含压缩前历史）与估算费用 · DeepSeek 账户余额（点击刷新）';
+      var title = '本会话 token 消耗（整段日志口径，含压缩前历史）与估算费用（' + (inPeak ? '高峰' : '低峰') + '价，≈） · DeepSeek 账户余额（点击刷新）';
       return React.createElement('button', {
         type: 'button', style: S.chip, title: title, onClick: load,
       }, parts);

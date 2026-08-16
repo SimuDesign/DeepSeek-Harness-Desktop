@@ -16,14 +16,27 @@
  * ordering), so route registration retries until it appears — the same
  * pattern as dsh-plugin-vision.
  */
+import { DEFAULT_PEAK_HOURS, DEFAULT_PEAK_MULTIPLIER } from './peak.js';
+
 const DEFAULT_CONFIG = {
-  currency: 'CNY',
-  // DeepSeek platform list prices per 1M tokens (deepseek-chat split, prompt
-  // cached vs uncached), as of this writing. Deployments override via the
-  // plugin config in their profile cordis.patch.yml.
-  inputPerM: 2,
-  cacheHitPerM: 0.5,
-  outputPerM: 8,
+  // Price table in USD per 1M tokens, DeepSeek-V4-FLASH list prices at the
+  // OFF-PEAK rate (peak hours 01:00-04:00 and 06:00-10:00 UTC are 2x). The
+  // harness default agent model is deepseek-v4-flash (settings.yaml
+  // agent-default-model); switch to V4-Pro off-peak (0.66 / 0.022 / 1.98)
+  // via the plugin config in the profile cordis.patch.yml when the route
+  // changes.
+  inputPerM: 0.22,
+  cacheHitPerM: 0.007,
+  outputPerM: 0.66,
+  // Peak/off-peak: peak hours are peakMultiplier x the off-peak rate. Served
+  // as a [start, end) UTC-hour schedule so the client judges the current
+  // window from its own clock without a host round-trip per render.
+  peakMultiplier: DEFAULT_PEAK_MULTIPLIER,
+  peakHours: DEFAULT_PEAK_HOURS,
+  currency: 'USD',
+  // Display conversion: the DeepSeek account balance is often CNY, so the
+  // estimated cost is converted to the balance currency for display.
+  usdToCny: 6.74,
   keyRef: 'DEEPSEEK_API_KEY',
 };
 
@@ -104,7 +117,10 @@ export default {
             inputPerM: cfg.inputPerM,
             cacheHitPerM: cfg.cacheHitPerM,
             outputPerM: cfg.outputPerM,
-            note: 'estimated session cost from the whole-log tokenUsage projection',
+            peakMultiplier: cfg.peakMultiplier,
+            peakHours: cfg.peakHours,
+            usdToCny: cfg.usdToCny,
+            note: 'estimated session cost from the whole-log tokenUsage projection (off-peak list price, 2x during peak hours)',
           });
         },
       }), 'dsh-plugin-usage-meter: /usage/config');

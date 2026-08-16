@@ -17,8 +17,11 @@ DeepSeek Harness 插件：在会话 header 右上角（`conversation.session.hea
   `outputTokens` / `cacheReadTokens` / `cacheWriteTokens`），是**整段会话日志**的累计口径
   （含被压缩前的历史、失败重试的输入），与 Trajectory/轨迹 页同源。
 - **费用**：估算值，`uncached×P_in + cacheRead×P_cacheHit + output×P_out`，价格表来自
-  host 路由 `/usage/config`（插件 config 可配，默认 DeepSeek 官网 deepseek-chat 单价：
-  输入未命中 ¥2/M、缓存命中 ¥0.5/M、输出 ¥8/M），不在 UI 代码里硬编码。
+  host 路由 `/usage/config`（插件 config 可配，默认与 harness 实际模型对齐——DeepSeek-V4-Flash
+  低峰价：输入未命中 $0.22/M、缓存命中 $0.007/M、输出 $0.66/M；切换 V4-Pro 请在配置改
+  0.66/0.022/1.98）；高峰时段（01:00–04:00 与 06:00–10:00 UTC）按 ×2 计入，由客户端本地 UTC
+  时钟判定当前时段，不在 UI 代码里硬编码。仍是「当前时段」估算：`tokenUsage` 投影为整段日志
+  累计、无逐请求时间戳，无法按请求精确分摊高峰/低峰。
 - **余额**：host 侧代理 `GET https://api.deepseek.com/user/balance`，key 经
   `ctx.credentials.resolve('DEEPSEEK_API_KEY')` 解析（`~/.dsh/.credentials.yaml`），
   **绝不下发到浏览器**；无 key 时 chip 显示「未配置」。

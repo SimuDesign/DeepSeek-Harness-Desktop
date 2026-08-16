@@ -1,0 +1,7 @@
+# dsh-plugin-file-upload bundle patch
+# Registers the (no-op) host service so the client bundle loads with the
+# profile. The feature itself lives in the browser client half (lib/client.js).
+#
+- insert:
+    - id: dsh-plugin-file-upload
+      name: 'dsh-plugin-file-upload'

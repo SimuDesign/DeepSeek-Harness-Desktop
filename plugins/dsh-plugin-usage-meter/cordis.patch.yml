@@ -7,10 +7,13 @@
 #       - id: dsh-plugin-usage-meter
 #         name: 'dsh-plugin-usage-meter'
 #         config:
-#           currency: CNY          # CNY | USD (display symbol)
-#           inputPerM: 2           # per 1M uncached input tokens
-#           cacheHitPerM: 0.5      # per 1M cache-read input tokens
-#           outputPerM: 8          # per 1M output tokens
+#           inputPerM: 0.22        # USD per 1M uncached input (V4-Flash off-peak)
+#           cacheHitPerM: 0.007    # USD per 1M cache-read input
+#           outputPerM: 0.66       # USD per 1M output
+#           peakMultiplier: 2      # peak-hour multiple over the off-peak rate
+#           peakHours: [[1, 4], [6, 10]]  # [start, end) UTC-hour peak windows
+#           currency: USD          # price-table currency
+#           usdToCny: 6.74         # display conversion when balance is CNY
 #           keyRef: DEEPSEEK_API_KEY  # credential reference for the balance proxy
 #
 - insert:
